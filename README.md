@@ -24,11 +24,11 @@ squid-auth-healthcheck --proxy-addr 127.0.0.1 --proxy-username test@TEST.LOCAL -
 ```
 Application Options:
   -u, --url=            url to check for availability (required)
-      --auth-type=      type of used proxy authentication mechanism. [ntlm, kerberos] (required)
+      --auth-type=      type of used proxy authentication mechanism. [ntlm, kerberos, no] (required)
       --proxy-addr=     proxy server address (required)
       --proxy-port=     proxy server port (default: 3128) (default: 3128)
-      --proxy-username= proxy user login (required)
-      --proxy-password= proxy user password (required)
+      --proxy-username= proxy user login
+      --proxy-password= proxy user password
       --timeout=        healthcheck connection timeout in seconds (default: 2) (default: 2)
       --strict-url      the check returns a positive result only if all URLs are available
       --strict-auth     the check returns a positive result only if url are available with all auth method

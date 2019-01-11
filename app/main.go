@@ -12,22 +12,22 @@ import (
 )
 
 const (
-	version = "0.0.1"
+	version = "0.0.2"
 )
 
 var opts struct {
 	URL               []string `short:"u" long:"url" description:"url to check for availability (required)" required:"true"`
-	AuthType          []string `long:"auth-type" description:"type of used proxy authentication mechanism. [ntlm, kerberos] (required)" required:"true"`
+	AuthType          []string `long:"auth-type" description:"type of used proxy authentication mechanism. [ntlm, kerberos, no] (required)" required:"true"`
 	ProxyAddr         string   `long:"proxy-addr" description:"proxy server address (required)" required:"true"`
 	ProxyPort         int      `long:"proxy-port" description:"proxy server port (default: 3128)" default:"3128"`
-	ProxyUsername     string   `long:"proxy-username" description:"proxy user login (required)" required:"true"`
-	ProxyPassword     string   `long:"proxy-password" description:"proxy user password (required)" required:"true"`
+	ProxyUsername     string   `long:"proxy-username" description:"proxy user login"`
+	ProxyPassword     string   `long:"proxy-password" description:"proxy user password"`
 	ConnectionTimeout int      `long:"timeout" description:"healthcheck connection timeout in seconds (default: 2)" default:"2"`
 	StrictURL         bool     `long:"strict-url" description:"the check returns a positive result only if all URLs are available"`
 	StrictAuth        bool     `long:"strict-auth" description:"the check returns a positive result only if url are available with all auth method"`
 	Verbose           bool     `short:"v" long:"verbose" description:"output verbose healthcheck information"`
 }
-var allowAuthType = [2]string{"ntlm", "kerberos"}
+var allowAuthType = [3]string{"ntlm", "kerberos", "no"}
 
 func exitOK(verbose bool) {
 	if !verbose {
@@ -72,19 +72,23 @@ func main() {
 	var wg sync.WaitGroup
 
 	ch := make(chan checker.HealthResponse, len(opts.AuthType)*len(opts.URL))
-	var ntlm checker.Interface = checker.NewAuthNTLM(opts.ProxyAddr, opts.ProxyPort, opts.ProxyUsername, opts.ProxyPassword, opts.ConnectionTimeout)
-	kerberos, err := checker.NewAuthKerberos(opts.ProxyAddr, opts.ProxyPort, opts.ProxyUsername, opts.ProxyPassword, opts.ConnectionTimeout)
-	if err != nil {
-		fmt.Println(err)
-		os.Exit(1)
-	}
 	wg.Add(len(opts.AuthType))
 
 	if slice.StringInSlice("ntlm", opts.AuthType) {
+		var ntlm checker.Interface = checker.NewAuthNTLM(opts.ProxyAddr, opts.ProxyPort, opts.ProxyUsername, opts.ProxyPassword, opts.ConnectionTimeout)
 		go ntlm.Check(opts.URL, ch, &wg)
 	}
 	if slice.StringInSlice("kerberos", opts.AuthType) {
+		kerberos, err := checker.NewAuthKerberos(opts.ProxyAddr, opts.ProxyPort, opts.ProxyUsername, opts.ProxyPassword, opts.ConnectionTimeout)
+		if err != nil {
+			fmt.Println(err)
+			os.Exit(1)
+		}
 		go kerberos.Check(opts.URL, ch, &wg)
+	}
+	if slice.StringInSlice("no", opts.AuthType) {
+		var no checker.Interface = checker.NewAuthNo(opts.ProxyAddr, opts.ProxyPort, opts.ConnectionTimeout)
+		go no.Check(opts.URL, ch, &wg)
 	}
 
 	wg.Wait()
