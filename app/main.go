@@ -17,7 +17,7 @@ const (
 
 var opts struct {
 	URL               []string `short:"u" long:"url" description:"url to check for availability (required)" required:"true"`
-	AuthType          []string `long:"auth-type" description:"type of used proxy authentication mechanism. [ntlm, kerberos, no] (required)" required:"true"`
+	AuthType          []string `long:"auth-type" description:"type of used proxy authentication mechanism. [ntlm, kerberos, no, all] (required)" required:"true"`
 	ProxyAddr         string   `long:"proxy-addr" description:"proxy server address (required)" required:"true"`
 	ProxyPort         int      `long:"proxy-port" description:"proxy server port (default: 3128)" default:"3128"`
 	ProxyUsername     string   `long:"proxy-username" description:"proxy user login"`
@@ -27,7 +27,7 @@ var opts struct {
 	StrictAuth        bool     `long:"strict-auth" description:"the check returns a positive result only if url are available with all auth method"`
 	Verbose           bool     `short:"v" long:"verbose" description:"output verbose healthcheck information"`
 }
-var allowAuthType = [3]string{"ntlm", "kerberos", "no"}
+var allowAuthType = []string{"ntlm", "kerberos", "no", "all"}
 
 func exitOK(verbose bool) {
 	if !verbose {
@@ -57,13 +57,26 @@ func main() {
 		os.Exit(1)
 	}
 
-	if len(opts.AuthType) > len(allowAuthType) {
+	var authType []string
+	if slice.StringInSlice("all", opts.AuthType) {
+		for _, v := range allowAuthType {
+			if v != "all" {
+				authType = append(authType, v)
+			}
+		}
+	} else {
+		for _, v := range opts.AuthType {
+			authType = append(authType, v)
+		}
+	}
+
+	if len(authType) > len(allowAuthType) {
 		fmt.Println("Too many authentication type")
 		os.Exit(1)
 	}
 
-	for _, item := range opts.AuthType {
-		if !slice.StringInSlice(item, opts.AuthType) {
+	for _, item := range authType {
+		if !slice.StringInSlice(item, allowAuthType) {
 			fmt.Printf("Authentication type %s is not allowed", item)
 			os.Exit(1)
 		}
@@ -71,14 +84,14 @@ func main() {
 
 	var wg sync.WaitGroup
 
-	ch := make(chan checker.HealthResponse, len(opts.AuthType)*len(opts.URL))
-	wg.Add(len(opts.AuthType))
+	ch := make(chan checker.HealthResponse, len(authType)*len(opts.URL))
+	wg.Add(len(authType))
 
-	if slice.StringInSlice("ntlm", opts.AuthType) {
+	if slice.StringInSlice("ntlm", authType) {
 		var ntlm checker.Interface = checker.NewAuthNTLM(opts.ProxyAddr, opts.ProxyPort, opts.ProxyUsername, opts.ProxyPassword, opts.ConnectionTimeout)
 		go ntlm.Check(opts.URL, ch, &wg)
 	}
-	if slice.StringInSlice("kerberos", opts.AuthType) {
+	if slice.StringInSlice("kerberos", authType) {
 		kerberos, err := checker.NewAuthKerberos(opts.ProxyAddr, opts.ProxyPort, opts.ProxyUsername, opts.ProxyPassword, opts.ConnectionTimeout)
 		if err != nil {
 			fmt.Println(err)
@@ -86,7 +99,7 @@ func main() {
 		}
 		go kerberos.Check(opts.URL, ch, &wg)
 	}
-	if slice.StringInSlice("no", opts.AuthType) {
+	if slice.StringInSlice("no", authType) {
 		var no checker.Interface = checker.NewAuthNo(opts.ProxyAddr, opts.ProxyPort, opts.ConnectionTimeout)
 		go no.Check(opts.URL, ch, &wg)
 	}
@@ -113,7 +126,7 @@ func main() {
 	}
 
 	if opts.StrictAuth {
-		if len(okAuthResult) < len(opts.AuthType) {
+		if len(okAuthResult) < len(authType) {
 			exitErr(opts.Verbose)
 		}
 	}
