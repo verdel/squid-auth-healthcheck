@@ -12,7 +12,7 @@ import (
 )
 
 const (
-	version = "0.0.2"
+	version = "0.0.3"
 )
 
 var opts struct {
@@ -57,6 +57,13 @@ func main() {
 		os.Exit(1)
 	}
 
+	if len(opts.AuthType) > 1 || (len(opts.AuthType) == 1 && !slice.StringInSlice("no", opts.AuthType)) {
+		if opts.ProxyPassword == "" || opts.ProxyUsername == "" {
+			fmt.Println("the required flags `--proxy-username' and `--proxy-password' were not specified")
+			os.Exit(1)
+		}
+	}
+
 	var authType []string
 	if slice.StringInSlice("all", opts.AuthType) {
 		for _, v := range allowAuthType {
@@ -65,9 +72,8 @@ func main() {
 			}
 		}
 	} else {
-		for _, v := range opts.AuthType {
-			authType = append(authType, v)
-		}
+		authType = make([]string, len(opts.AuthType))
+		copy(authType, opts.AuthType)
 	}
 
 	if len(authType) > len(allowAuthType) {
@@ -77,7 +83,7 @@ func main() {
 
 	for _, item := range authType {
 		if !slice.StringInSlice(item, allowAuthType) {
-			fmt.Printf("Authentication type %s is not allowed", item)
+			fmt.Printf("Authentication typvje %s is not allowed", item)
 			os.Exit(1)
 		}
 	}
