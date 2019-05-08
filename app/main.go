@@ -83,7 +83,7 @@ func main() {
 
 	for _, item := range authType {
 		if !slice.StringInSlice(item, allowAuthType) {
-			fmt.Printf("Authentication typvje %s is not allowed", item)
+			fmt.Printf("Authentication type %s is not allowed", item)
 			os.Exit(1)
 		}
 	}
