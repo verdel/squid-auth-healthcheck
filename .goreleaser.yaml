@@ -1,0 +1,6 @@
+builds:
+  - id: "squid-auth-healthcheck"
+    goos:
+      - linux
+    goarch:
+      - amd64

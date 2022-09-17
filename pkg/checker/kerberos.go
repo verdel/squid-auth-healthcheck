@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"net"
 	"os/exec"
 	"sync"
 
@@ -18,16 +19,18 @@ const (
 type AuthKerberos struct {
 	authType          string
 	ProxyAddr         string
+	ProxyNodeAddr     string
 	ProxyPort         int
 	ProxyUsername     string
 	ProxyPassword     string
 	ConnectionTimeout int
 }
 
-func NewAuthKerberos(ProxyAddr string, ProxyPort int, ProxyUsername string, ProxyPassword string, ConnectionTimeout int) (*AuthKerberos, error) {
+func NewAuthKerberos(ProxyAddr string, ProxyNodeAddr string, ProxyPort int, ProxyUsername string, ProxyPassword string, ConnectionTimeout int) (*AuthKerberos, error) {
 	var a AuthKerberos
 	a.authType = "kerberos"
 	a.ProxyAddr = ProxyAddr
+	a.ProxyNodeAddr = ProxyNodeAddr
 	a.ProxyPort = ProxyPort
 	a.ProxyUsername = ProxyUsername
 	a.ProxyPassword = ProxyPassword
@@ -38,7 +41,6 @@ func NewAuthKerberos(ProxyAddr string, ProxyPort int, ProxyUsername string, Prox
 	} else {
 		return &a, nil
 	}
-
 }
 
 func (a *AuthKerberos) loginKRB(username, password string) error {
@@ -66,7 +68,7 @@ func (a *AuthKerberos) loginKRB(username, password string) error {
 
 	err = cmd.Wait()
 	if err != nil {
-		return fmt.Errorf("%s did not run successfully: %v stderr: %s", kinitCmd, err, string(errBuf.Bytes()))
+		return fmt.Errorf("%s did not run successfully: %v stderr: %s", kinitCmd, err, string(errBuf.String()))
 	}
 	return nil
 }
@@ -89,15 +91,22 @@ func (a *AuthKerberos) destroyKRB() error {
 
 	err = cmd.Wait()
 	if err != nil {
-		return fmt.Errorf("%s did not run successfully: %v stderr: %s", kinitCmd, err, string(errBuf.Bytes()))
+		return fmt.Errorf("%s did not run successfully: %v stderr: %s", kinitCmd, err, string(errBuf.String()))
 	}
 	return nil
 }
 
 func (a *AuthKerberos) Check(urls []string, ch chan HealthResponse, wg *sync.WaitGroup) {
+
 	defer a.destroyKRB()
 	var innerWg sync.WaitGroup
 	innerWg.Add(len(urls))
+
+	var proxyNodeIP string
+	if a.ProxyAddr != a.ProxyNodeAddr {
+		proxyNodeIP = getNodeIP(a.ProxyNodeAddr)
+	}
+
 	for _, url := range urls {
 		go func(u string) {
 			conn := curl.EasyInit()
@@ -112,6 +121,9 @@ func (a *AuthKerberos) Check(urls []string, ch chan HealthResponse, wg *sync.Wai
 			conn.Setopt(curl.OPT_TIMEOUT, a.ConnectionTimeout)
 			conn.Setopt(curl.OPT_WRITEFUNCTION, nullHandler)
 			conn.Setopt(curl.OPT_URL, u)
+			if a.ProxyAddr != a.ProxyNodeAddr {
+				conn.Setopt(curl.OPT_RESOLVE, []string{fmt.Sprintf("%s:%d:%s", a.ProxyAddr, a.ProxyPort, proxyNodeIP)})
+			}
 			if err := conn.Perform(); err != nil {
 				ch <- HealthResponse{u, a.authType, 0, 0}
 			} else {
@@ -129,4 +141,9 @@ func (a *AuthKerberos) Check(urls []string, ch chan HealthResponse, wg *sync.Wai
 	}
 	innerWg.Wait()
 	wg.Done()
+}
+
+func getNodeIP(ProxyAddr string) string {
+	ips, _ := net.LookupIP(ProxyAddr)
+	return ips[0].String()
 }

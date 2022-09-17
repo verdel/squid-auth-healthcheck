@@ -7,12 +7,12 @@ import (
 	"sync"
 
 	flags "github.com/jessevdk/go-flags"
-	"github.com/verdel/squid-auth-healthcheck/app/checker"
-	"github.com/verdel/squid-auth-healthcheck/app/slice"
+	"github.com/verdel/squid-auth-healthcheck/pkg/checker"
+	"github.com/verdel/squid-auth-healthcheck/pkg/slice"
 )
 
 const (
-	version = "0.0.3"
+	version = "0.0.4"
 )
 
 var opts struct {
@@ -25,6 +25,8 @@ var opts struct {
 	ConnectionTimeout int      `long:"timeout" description:"healthcheck connection timeout in seconds (default: 2)" default:"2"`
 	StrictURL         bool     `long:"strict-url" description:"the check returns a positive result only if all URLs are available"`
 	StrictAuth        bool     `long:"strict-auth" description:"the check returns a positive result only if url are available with all auth method"`
+	ClusterCheck      bool     `long:"cluster-check" description:"check through proxy cluster node instead standalone proxy server"`
+	IngressProxyAddr  string   `long:"ingress-proxy-addr" description:"ingress proxy address. It will be used for kerberos verification. This FQDN will be used when forming the request, but the IP address of the node of the proxy server cluster will be used as the IP address" required:"false"`
 	Verbose           bool     `short:"v" long:"verbose" description:"output verbose healthcheck information"`
 }
 var allowAuthType = []string{"ntlm", "kerberos", "no", "all"}
@@ -64,6 +66,11 @@ func main() {
 		}
 	}
 
+	if opts.ClusterCheck && opts.IngressProxyAddr == "" {
+		fmt.Println("the required flags `--ingress-proxy-addr' were not specified")
+		os.Exit(1)
+	}
+
 	var authType []string
 	if slice.StringInSlice("all", opts.AuthType) {
 		for _, v := range allowAuthType {
@@ -98,7 +105,15 @@ func main() {
 		go ntlm.Check(opts.URL, ch, &wg)
 	}
 	if slice.StringInSlice("kerberos", authType) {
-		kerberos, err := checker.NewAuthKerberos(opts.ProxyAddr, opts.ProxyPort, opts.ProxyUsername, opts.ProxyPassword, opts.ConnectionTimeout)
+		var IngressProxyAddr string
+
+		if opts.ClusterCheck {
+			IngressProxyAddr = opts.IngressProxyAddr
+		} else {
+			IngressProxyAddr = opts.ProxyAddr
+		}
+
+		kerberos, err := checker.NewAuthKerberos(IngressProxyAddr, opts.ProxyAddr, opts.ProxyPort, opts.ProxyUsername, opts.ProxyPassword, opts.ConnectionTimeout)
 		if err != nil {
 			fmt.Println(err)
 			os.Exit(1)
